@@ -73,7 +73,7 @@ The structure directory is defined near the beginning of the Python script:
 STRUCTURE_FOLDER = "structures"
 ```
 
-Therefore, when the program is executed from the repository root,
+Therefore, when the program is executed from the repository root:
 
 ```bash
 python src/RACE_descriptor.py
@@ -85,8 +85,8 @@ it searches for:
 structures/*.cif
 ```
 
-Each CIF file is read using ASE and one structure-level RACE representation is
-calculated for each structure.
+Each CIF file is read using ASE, and one structure-level RACE representation is calculated
+for each structure.
 
 The input directory can be changed directly in the source code.
 
@@ -106,27 +106,26 @@ STRUCTURE_FOLDER = "/path/to/my/structures"
 
 ## Output file
 
-In the current implementation, the output filename is controlled by:
+The output filename is controlled by:
 
 ```python
 OUTPUT_FILE = "descriptor_RACE.csv"
 ```
 
-With this setting, the CSV is written to the repository root.
-
-To reproduce the organization used in this repository, the recommended setting is:
+To write the calculated descriptors directly to the `results/` directory used in this
+repository, use:
 
 ```python
 OUTPUT_FILE = os.path.join("results", "descriptors.csv")
 ```
 
-and, before writing the CSV, the output directory can be created automatically using:
+and create the output directory automatically before saving:
 
 ```python
 os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 ```
 
-The resulting workflow is:
+The complete workflow is then:
 
 ```text
 structures/*.cif
@@ -147,19 +146,19 @@ mean + standard deviation
 results/descriptors.csv
 ```
 
-Each row in the CSV corresponds to one structure.
+Each row of the resulting CSV corresponds to one input structure.
 
-The first column stores the original input filename, allowing every descriptor vector
-to be mapped back to its corresponding atomic structure.
+The first column stores the original CIF filename, allowing each descriptor vector to
+be mapped directly to the corresponding atomic structure.
 
-> **Important:** when relative paths such as `STRUCTURE_FOLDER = "structures"` are
-> used, run the script from the root directory of the repository.
+> **Important:** when relative paths such as `STRUCTURE_FOLDER = "structures"` are used,
+> run the script from the root directory of the repository.
 
 ---
 
 # Input structure ordering
 
-The current implementation determines the processing order from the leading integer
+The current implementation determines the processing order using the leading integer
 in each filename:
 
 ```python
@@ -179,7 +178,7 @@ Therefore:
 100.cif
 ```
 
-are processed numerically rather than using standard lexicographic ordering:
+are processed numerically rather than using ordinary lexicographic ordering:
 
 ```text
 1.cif
@@ -201,8 +200,8 @@ For maximum reproducibility, numerically indexed filenames are recommended:
 ```
 
 Files that do not begin with a number receive the same fallback sorting key in the
-current implementation. Therefore, their relative ordering is not explicitly defined
-by `numeric_sort_key`.
+current implementation. Therefore, numerical prefixes are recommended when the exact
+processing order is important.
 
 ---
 
@@ -239,12 +238,12 @@ into radial, angular, and coupled radial–angular contributions.
 
 # Local atomic environment
 
-For a central atom $i$, RACE considers neighboring atoms $j$ whose interatomic
-distance satisfies:
+For a central atom `i`, RACE considers neighboring atoms `j` whose interatomic distance
+satisfies:
 
-$$
+```math
 r_{ij} < R_c.
-$$
+```
 
 The default implementation uses:
 
@@ -254,9 +253,7 @@ R_CUT = 4.5
 
 where the cutoff is expressed in ångström.
 
-Neighbor environments are generated using the ASE `NeighborList` class.
-
-The code uses:
+Neighbor environments are generated using the ASE `NeighborList` implementation:
 
 ```python
 cutoffs = [R_CUT / 2] * n
@@ -268,11 +265,12 @@ nl = NeighborList(
 )
 ```
 
-The actual interatomic distance is subsequently evaluated explicitly, and the smooth
-cutoff function ensures that contributions with $r \geq R_c$ vanish.
+The actual interatomic distance is subsequently calculated explicitly, and the smooth
+cutoff ensures that contributions at or beyond `R_c` vanish.
 
-Periodic-image offsets returned by ASE are included when reconstructing neighbor
-positions, which allows periodic structures stored in CIF format to be treated.
+Periodic-image offsets returned by ASE are included when reconstructing neighboring
+atomic positions, allowing periodic structures stored in CIF format to be treated
+correctly.
 
 ---
 
@@ -280,9 +278,9 @@ positions, which allows periodic structures stored in CIF format to be treated.
 
 Neighbor contributions are smoothly attenuated as they approach the cutoff radius.
 
-For $r < R_c$:
+For `r < R_c`:
 
-$$
+```math
 w_c(r)
 =
 \frac{1}{2}
@@ -293,13 +291,13 @@ w_c(r)
 +
 1
 \right].
-$$
+```
 
-For $r \geq R_c$:
+For `r >= R_c`:
 
-$$
+```math
 w_c(r)=0.
-$$
+```
 
 The corresponding implementation is:
 
@@ -312,8 +310,8 @@ def smooth_cutoff(r):
     return 0.5 * (np.cos(np.pi * r / R_CUT) + 1.0)
 ```
 
-The cosine cutoff avoids an abrupt discontinuity in the descriptor as an atom approaches
-the boundary of the local environment.
+The cosine cutoff avoids an abrupt discontinuity in the descriptor when an atom
+approaches the boundary of the local environment.
 
 ---
 
@@ -321,16 +319,16 @@ the boundary of the local environment.
 
 Chemical identity is introduced through a scalar atomic-number map.
 
-For a central atom $i$ and neighbor $j$, the current implementation uses:
+For a central atom `i` and a neighbor `j`, the current implementation uses:
 
-$$
+```math
 w_{ij}
 =
 w_c(r_{ij})
-\sqrt{Z_i Z_j},
-$$
+\sqrt{Z_i Z_j}.
+```
 
-where $Z_i$ and $Z_j$ are the corresponding atomic numbers.
+Here, `Z_i` and `Z_j` are the corresponding atomic numbers.
 
 The chemical part is implemented as:
 
@@ -340,7 +338,7 @@ def chem_weight(Zi, Zj):
     return np.sqrt(Zi * Zj)
 ```
 
-and combined with the distance-dependent cutoff through:
+and combined with the smooth cutoff through:
 
 ```python
 w = wc * chem_weight(Zi, Zj)
@@ -349,9 +347,9 @@ w = wc * chem_weight(Zi, Zj)
 Atomic number should be regarded as a simple and universally available default
 chemical map.
 
-It is **not** intended to represent a unique physical metric of chemical similarity.
+It should **not** be interpreted as a unique physical measure of chemical similarity.
 
-The RACE framework can also accommodate alternative elemental maps such as:
+The RACE framework can accommodate alternative elemental maps such as:
 
 - electronegativity;
 - covalent radius;
@@ -365,10 +363,10 @@ dataset.
 
 # Radial distribution function
 
-For each central atom $i$, the radial component is constructed by accumulating Gaussian
+For each central atom `i`, the radial component is constructed by accumulating Gaussian
 contributions from neighboring atoms:
 
-$$
+```math
 \mathrm{RDF}^{(i)}_p
 =
 \sum_j
@@ -381,13 +379,13 @@ w_{ij}
 2\sigma_r^2
 }
 \right].
-$$
+```
 
 Here:
 
-- $\mu_p$ is the $p$-th radial center;
-- $\sigma_r$ is the Gaussian radial width;
-- $w_{ij}$ contains the smooth cutoff and chemical weighting.
+- `mu_p` is the `p`-th radial center;
+- `sigma_r` is the radial Gaussian width;
+- `w_ij` contains the smooth cutoff and chemical weighting.
 
 The radial grid is defined by:
 
@@ -399,7 +397,7 @@ N_R = 16
 SIGMA_R = 0.08
 ```
 
-and the centers are generated as:
+with centers generated using:
 
 ```python
 r_centers = np.linspace(R_MIN, R_CUT, N_R)
@@ -412,15 +410,15 @@ between 1.0 and 4.5 Å.
 
 # Angular distribution function
 
-For a central atom $i$, each pair of neighbors $j$ and $l$ defines an angle:
+For a central atom `i`, every pair of neighbors `j` and `l` defines an angle:
 
-$$
+```math
 \theta_{jil}.
-$$
+```
 
 The angular component is:
 
-$$
+```math
 \mathrm{ADF}^{(i)}_q
 =
 \sum_{j<l}
@@ -433,12 +431,12 @@ w_{ij}w_{il}
 2\sigma_\theta^2
 }
 \right].
-$$
+```
 
 Here:
 
-- $\nu_q$ is the $q$-th angular center;
-- $\sigma_\theta$ is the angular Gaussian width.
+- `nu_q` is the `q`-th angular center;
+- `sigma_theta` is the angular Gaussian width.
 
 The implementation uses:
 
@@ -465,7 +463,7 @@ The third RACE component explicitly couples radial and angular information.
 
 The joint representation is:
 
-$$
+```math
 F^{(i)}_{p,q}
 =
 \sum_{j<l}
@@ -476,11 +474,11 @@ K_r(r_{ij};\mu_p)
 K_r(r_{il};\mu_p)
 \right]
 K_\theta(\theta_{jil};\nu_q).
-$$
+```
 
 The radial kernel is:
 
-$$
+```math
 K_r(r;\mu_p)
 =
 \exp
@@ -490,12 +488,12 @@ K_r(r;\mu_p)
 }{
 2\sigma_r^2
 }
-\right],
-$$
+\right].
+```
 
-and the angular kernel is:
+The angular kernel is:
 
-$$
+```math
 K_\theta(\theta;\nu_q)
 =
 \exp
@@ -506,16 +504,15 @@ K_\theta(\theta;\nu_q)
 2\sigma_\theta^2
 }
 \right].
-$$
+```
 
-The joint map therefore retains information about **which radial and angular motifs
-occur together**.
+The joint map therefore retains information about **which radial and angular motifs occur
+together**.
 
-For example, two structures can have similar independent RDF and ADF distributions
-while differing in the association between particular bond lengths and particular
-bond angles.
+Two structures may exhibit similar RDF and ADF distributions while differing in the
+association between particular interatomic distances and particular bond angles.
 
-The joint component provides an explicit numerical representation of these correlations.
+The joint component explicitly exposes these correlations.
 
 Its usefulness, however, is dataset dependent and it should not be regarded as a
 universally beneficial addition.
@@ -528,19 +525,19 @@ The default parameter set used in the associated study is:
 
 | Parameter | Symbol | Code variable | Default |
 |---|---|---|---:|
-| Cutoff radius | $R_c$ | `R_CUT` | 4.5 Å |
-| Minimum radial center | $r_{\min}$ | `R_MIN` | 1.0 Å |
-| Number of radial centers | $N_R$ | `N_R` | 16 |
-| Radial Gaussian width | $\sigma_r$ | `SIGMA_R` | 0.08 Å |
-| Number of angular centers | $N_A$ | `N_A` | 16 |
-| Angular Gaussian width | $\sigma_\theta$ | `SIGMA_A_DEG` | 7° |
+| Cutoff radius | `R_c` | `R_CUT` | 4.5 Å |
+| Minimum radial center | `r_min` | `R_MIN` | 1.0 Å |
+| Number of radial centers | `N_R` | `N_R` | 16 |
+| Radial Gaussian width | `sigma_r` | `SIGMA_R` | 0.08 Å |
+| Number of angular centers | `N_A` | `N_A` | 16 |
+| Angular Gaussian width | `sigma_theta` | `SIGMA_A_DEG` | 7° |
 | Local normalization | — | `NORMALIZE_LOCAL` | `True` |
 | Structure-level mean normalization | — | `NORMALIZE_GLOBAL` | `True` |
-| Numerical tolerance | — | `EPS` | $10^{-12}$ |
+| Numerical tolerance | — | `EPS` | `1e-12` |
 | Structure aggregation | — | — | mean + standard deviation |
 
-The geometric parameters were kept fixed across the benchmark datasets rather than
-being independently optimized for every system.
+The geometric parameters were held fixed across the benchmark datasets rather than
+optimized independently for every system.
 
 ---
 
@@ -561,25 +558,27 @@ The value of **4.5 Å** was selected as a fixed compromise between:
 - capturing structural information beyond only the first bond shell;
 - limiting the number of neighbor pairs entering the angular and joint calculations.
 
-The final point is particularly relevant for RACE because the angular and joint
-components operate on pairs of neighbors around each central atom.
+This last point is particularly important because the angular and joint components
+operate on pairs of neighbors around each central atom.
 
-If the number of neighbors of an atom is $m$, the number of unique neighbor pairs is:
+If a central atom has `m` neighbors, the number of unique neighbor pairs is:
 
-$$
+```math
+N_{\mathrm{pairs}}
+=
 \frac{m(m-1)}{2}.
-$$
+```
 
-Consequently, increasing the cutoff can significantly increase the number of angular
-evaluations.
+Consequently, increasing the cutoff radius can significantly increase the number of
+angular evaluations.
 
-A larger cutoff may include useful information from more distant coordination shells,
-but this comes at additional computational cost.
+A larger cutoff can provide information from more distant coordination shells, but at
+additional computational cost.
 
 The value 4.5 Å should therefore **not** be interpreted as universally optimal for every
 material or target property.
 
-It was used as a common reference value in the associated study in order to avoid
+It was used as a common reference value in the associated study to avoid
 dataset-specific descriptor tuning.
 
 ---
@@ -590,38 +589,37 @@ dataset-specific descriptor tuning.
 R_MIN = 1.0
 ```
 
-`R_MIN` defines the position of the first radial Gaussian center.
+`R_MIN` specifies the location of the first radial Gaussian center.
 
-It is important to distinguish `R_MIN` from a hard lower cutoff.
+It is important to distinguish `R_MIN` from a hard lower-distance cutoff.
 
-The implementation does **not** reject a neighbor simply because:
+The implementation does **not** discard a neighbor simply because its distance is less
+than `R_MIN`.
 
-$$
-r < R_{\min}.
-$$
+Instead, all valid neighbors inside `R_CUT` contribute to the Gaussian basis.
 
-Instead, all valid neighbors inside $R_c$ contribute to the radial Gaussian functions.
+Thus, `R_MIN` determines the starting point of the radial basis grid, rather than a
+forbidden interatomic-distance region.
 
-`R_MIN` therefore controls the starting position of the radial basis grid rather than
-defining a forbidden interatomic-distance region.
+The radial centers span:
 
-The radial centers are:
-
-$$
+```math
+R_{\min}
+\leq
 \mu_p
-\in
-[R_{\min},R_c].
-$$
+\leq
+R_c.
+```
 
 For the default configuration:
 
-$$
+```math
 1.0\ \mathrm{\AA}
 \leq
 \mu_p
 \leq
 4.5\ \mathrm{\AA}.
-$$
+```
 
 ---
 
@@ -631,32 +629,29 @@ $$
 N_R = 16
 ```
 
-`N_R` controls the radial resolution of the descriptor.
+`N_R` controls the radial resolution of the representation.
 
 Increasing `N_R` produces a finer sampling of radial space.
 
-However, the effect on descriptor dimensionality is greater than simply adding more RDF
-features because the joint component contains:
+However, its effect on dimensionality extends beyond the RDF because the joint map
+contains:
 
-$$
-N_RN_A
-$$
+```math
+N_R N_A
+```
 
 grid positions.
 
-Therefore, increasing radial resolution also increases the size of the joint
-radial–angular representation.
+For fixed `N_A`, the joint contribution has dimension:
 
-For fixed $N_A$:
-
-$$
+```math
 D_{\mathrm{joint}}
 =
 2N_RN_A.
-$$
+```
 
-Thus, radial resolution is directly connected to both descriptor size and computational
-cost.
+Therefore, increasing radial resolution also increases the size and computational cost
+of the joint radial–angular representation.
 
 ---
 
@@ -666,34 +661,35 @@ cost.
 SIGMA_R = 0.08
 ```
 
-The radial Gaussian width controls the degree of smoothing applied to interatomic
-distances.
+The radial Gaussian width controls how strongly a neighbor contributes to basis centers
+around its actual interatomic distance.
 
-A smaller $\sigma_r$ gives narrower Gaussian functions and therefore sharper radial
-localization.
+A smaller value produces narrower and more localized radial features.
 
-A larger $\sigma_r$ gives broader features and stronger smoothing.
+A larger value produces broader and smoother distributions.
 
 Conceptually:
 
 ```text
-smaller sigma_r
+smaller SIGMA_R
         ↓
-sharper radial resolution
+sharper radial localization
 
-larger sigma_r
+larger SIGMA_R
         ↓
-broader and smoother radial distributions
+stronger radial smoothing
 ```
 
-The default value used in the study is:
+The default value is:
 
-$$
-\sigma_r = 0.08\ \mathrm{\AA}.
-$$
+```math
+\sigma_r
+=
+0.08\ \mathrm{\AA}.
+```
 
-This value was kept fixed across the benchmark systems rather than optimized separately
-for each dataset.
+This value was kept fixed across the benchmark datasets rather than optimized separately
+for every system.
 
 ---
 
@@ -703,30 +699,27 @@ for each dataset.
 N_A = 16
 ```
 
-`N_A` controls the angular resolution.
+`N_A` controls the angular resolution of the descriptor.
 
 The angular centers span:
 
-$$
+```math
 0^\circ
 \leq
 \theta
 \leq
 180^\circ.
-$$
+```
 
-A larger `N_A` allows finer sampling of the angular distribution.
+A larger `N_A` allows finer sampling of angular space.
 
-However, because the joint block contains $N_RN_A$ positions, increasing `N_A` also
-increases the dimensionality of the joint representation.
+However, increasing `N_A` also enlarges the joint radial–angular block because:
 
-For fixed $N_R$:
-
-$$
+```math
 D_{\mathrm{joint}}
 =
 2N_RN_A.
-$$
+```
 
 ---
 
@@ -740,11 +733,13 @@ The angular Gaussian width determines the smoothing applied to bond-angle inform
 
 The default value is:
 
-$$
-\sigma_\theta = 7^\circ.
-$$
+```math
+\sigma_\theta
+=
+7^\circ.
+```
 
-A smaller angular width gives sharper discrimination between nearby angular motifs.
+A smaller angular width provides sharper discrimination between nearby angular motifs.
 
 A larger width increases overlap between neighboring angular basis functions and
 produces smoother angular distributions.
@@ -756,15 +751,15 @@ produces smoother angular distributions.
 The geometric RACE parameters were intentionally held fixed across the benchmark
 datasets in the associated study.
 
-They were not individually optimized for each material system.
+They were not individually optimized for every material system.
 
-This avoids introducing dataset-specific descriptor tuning when comparing RACE with
-alternative atomistic representations.
+This reduces the possibility that descriptor comparisons are dominated by
+dataset-specific hyperparameter tuning.
 
 The default configuration should therefore be interpreted as a **common reference
 parameterization**, rather than as a claim that these values are universally optimal.
 
-For a new application, parameter sensitivity may be investigated by varying:
+For a new application, parameter sensitivity can be investigated by varying:
 
 ```text
 R_CUT
@@ -775,7 +770,7 @@ N_A
 SIGMA_A_DEG
 ```
 
-while maintaining a controlled model-training and validation protocol.
+while maintaining a controlled training and validation protocol.
 
 ---
 
@@ -800,8 +795,7 @@ def safe_l1_normalize(x):
     return x
 ```
 
-When enabled, the three blocks of each local atomic environment are normalized
-independently:
+When enabled, each local block is normalized independently:
 
 ```text
 RDF
@@ -809,72 +803,78 @@ ADF
 F(r,θ)
 ```
 
-provided that their total contribution is larger than the numerical tolerance.
+provided that its sum is greater than the numerical tolerance.
 
-The normalization transforms a vector $\mathbf{x}$ according to:
+The normalization is:
 
-$$
+```math
 \mathbf{x}_{\mathrm{norm}}
 =
 \frac{\mathbf{x}}
-{\sum_k x_k},
-$$
+{\sum_k x_k}.
+```
 
-when:
+It is applied when:
 
-$$
-\sum_k x_k > \varepsilon.
-$$
+```math
+\sum_k x_k
+>
+\varepsilon.
+```
 
-The numerical tolerance used by the code is:
+The numerical tolerance is:
 
-$$
-\varepsilon = 10^{-12}.
-$$
+```math
+\varepsilon
+=
+10^{-12}.
+```
 
 Local normalization reduces dependence on the absolute magnitude of each block and
-emphasizes how its intensity is distributed over radial and angular space.
+emphasizes the distribution of intensity over radial and angular space.
 
 ---
 
 # Structure-level aggregation
 
-After computing a local descriptor for every atom, the local representations are
-converted into a fixed-length structure-level vector.
+After calculating a local descriptor for every atom, the collection of local
+representations is converted into one fixed-length structure-level vector.
 
 For each descriptor component, the implementation calculates both the atomic mean and
 standard deviation.
 
-For the RDF:
+For example:
 
 ```python
 rdf_mean = rdf_stack.mean(axis=0)
 rdf_std = rdf_stack.std(axis=0)
 ```
 
-and similarly for the ADF and joint blocks.
+and analogously for the ADF and joint blocks.
 
-Conceptually:
+The mean:
 
-$$
+```math
 \left\langle
 \mathbf{x}^{(i)}
 \right\rangle_i
-$$
+```
 
-describes the average local environment, while:
+describes the average local environment.
 
-$$
+The standard deviation:
+
+```math
 \operatorname{std}_i
 \left[
 \mathbf{x}^{(i)}
 \right]
-$$
+```
 
-describes the variation among atomic environments in the structure.
+provides information about variation among the local atomic environments.
 
-The standard-deviation component is particularly useful for distinguishing structures
-containing heterogeneous or inequivalent atomic environments.
+This is particularly useful for structures containing inequivalent sites, disorder,
+defects, surfaces, or other forms of local heterogeneity.
 
 ---
 
@@ -910,7 +910,7 @@ are retained without this second normalization.
 
 For one chemical channel, the dimensionality of the **core RACE representation** is:
 
-$$
+```math
 D_{\mathrm{RACE}}
 =
 2N_R
@@ -918,9 +918,9 @@ D_{\mathrm{RACE}}
 2N_A
 +
 2N_RN_A.
-$$
+```
 
-The factor of two appears because each local descriptor component contributes both:
+The factor of two appears because each component contributes both:
 
 ```text
 mean
@@ -932,21 +932,16 @@ at the structure level.
 
 Using the default values:
 
-$$
+```text
 N_R = 16
-$$
+N_A = 16
+```
 
-and:
-
-$$
-N_A = 16,
-$$
-
-the individual contributions are as follows.
+the contributions are:
 
 ## RDF contribution
 
-$$
+```math
 D_{\mathrm{RDF}}
 =
 2N_R
@@ -954,11 +949,11 @@ D_{\mathrm{RDF}}
 2(16)
 =
 32.
-$$
+```
 
 ## ADF contribution
 
-$$
+```math
 D_{\mathrm{ADF}}
 =
 2N_A
@@ -966,29 +961,29 @@ D_{\mathrm{ADF}}
 2(16)
 =
 32.
-$$
+```
 
 ## Joint radial–angular contribution
 
-$$
+```math
 D_{\mathrm{joint}}
 =
 2N_RN_A.
-$$
+```
 
 Therefore:
 
-$$
+```math
 D_{\mathrm{joint}}
 =
 2(16)(16)
 =
 512.
-$$
+```
 
 Finally:
 
-$$
+```math
 D_{\mathrm{RACE}}
 =
 32
@@ -998,7 +993,7 @@ D_{\mathrm{RACE}}
 512
 =
 576.
-$$
+```
 
 | Component | Dimension |
 |---|---:|
@@ -1007,13 +1002,11 @@ $$
 | Joint mean + standard deviation | 512 |
 | **Core RACE** | **576** |
 
-Thus, for $N_R=N_A=16$:
+Thus, for `N_R = N_A = 16`:
 
-$$
-\boxed{
-D_{\mathrm{RACE}}=576
-}
-$$
+```math
+D_{\mathrm{RACE}} = 576.
+```
 
 ---
 
@@ -1039,13 +1032,15 @@ rdf_mean_15
 rdf_std_15
 ```
 
-There are:
+The RDF block contains:
 
-$$
-2N_R = 32
-$$
+```math
+2N_R
+=
+32
+```
 
-RDF columns.
+features.
 
 ---
 
@@ -1059,32 +1054,34 @@ adf_mean_15
 adf_std_15
 ```
 
-There are:
+The ADF block contains:
 
-$$
-2N_A = 32
-$$
+```math
+2N_A
+=
+32
+```
 
-ADF columns.
+features.
 
 ---
 
 ## Joint radial–angular features
 
-The $N_R \times N_A$ joint matrix is flattened before being written to the CSV.
+The `N_R × N_A` joint matrix is flattened before being written to the CSV.
 
 For the default configuration:
 
-$$
+```math
 N_RN_A
 =
-16\times16
+16(16)
 =
 256.
-$$
+```
 
-Therefore the mean block contains 256 values and the standard-deviation block contains
-another 256 values:
+Therefore, the mean joint block contains 256 values and the standard-deviation block
+contains another 256:
 
 ```text
 joint_mean_0000
@@ -1099,11 +1096,13 @@ joint_mean_0255
 joint_std_0255
 ```
 
-The joint component therefore contains:
+The complete joint component therefore contains:
 
-$$
-2(256)=512
-$$
+```math
+2(256)
+=
+512
+```
 
 features.
 
@@ -1121,16 +1120,16 @@ z_min
 z_max
 ```
 
-These variables are useful structural and chemical metadata, but they are **not part of
-the 576-dimensional core RACE representation** defined above.
+These quantities can be useful as structural and chemical metadata, but they are
+**not part of the 576-dimensional core RACE representation** defined above.
 
 Therefore, the current implementation produces:
 
-$$
+```math
 576 + 5 = 581
-$$
+```
 
-numerical columns, consisting of:
+numerical quantities:
 
 ```text
 576 core RACE features
@@ -1138,13 +1137,15 @@ numerical columns, consisting of:
 = 581 numerical quantities
 ```
 
-The CSV additionally contains the non-numerical identification column:
+The CSV additionally contains:
 
 ```text
 filename
 ```
 
-When comparing descriptor dimensionality with the associated publication, the five
+for structure identification.
+
+When comparing descriptor dimensionality with the associated publication, these five
 auxiliary quantities should therefore be distinguished from the core RACE descriptor.
 
 ---
@@ -1157,9 +1158,9 @@ graphene.
 The benchmark associated with the study was generated from graphene supercells
 initially containing:
 
-$$
-288\ \text{atoms}.
-$$
+```text
+288 atoms
+```
 
 Nominal vacancy concentrations of:
 
@@ -1171,21 +1172,23 @@ Nominal vacancy concentrations of:
 
 were considered.
 
-For each vacancy concentration:
+For each concentration:
 
 ```text
 50 independent configurations
 ```
 
-were retained, giving:
+were retained.
 
-$$
-3\times50 = 150
-$$
+The total number of structures was therefore:
 
-structures in total.
+```math
+3(50)
+=
+150.
+```
 
-The default RACE parameters were retained for this dataset:
+The default RACE parameters were used:
 
 ```python
 R_CUT = 4.5
@@ -1198,7 +1201,9 @@ N_A = 16
 SIGMA_A_DEG = 7.0
 ```
 
-The corresponding precomputed descriptor table is stored in:
+No vacancy-specific optimization of the geometric parameters was performed.
+
+The corresponding precomputed descriptor table is available in:
 
 ```text
 results/descriptors.csv
@@ -1212,35 +1217,38 @@ The vacancy-defective graphene structures contain only carbon atoms.
 
 For carbon:
 
-$$
-Z_{\mathrm{C}}=6.
-$$
-
-Therefore, for every C–C pair:
-
-$$
-\sqrt{Z_iZ_j}
-=
-\sqrt{6\times6}
+```math
+Z_{\mathrm{C}}
 =
 6.
-$$
+```
 
-The scalar chemical factor is consequently identical for all C–C pairs.
+Therefore, every C–C pair has the same chemical factor:
 
-After block normalization, differences among the RACE vectors are therefore dominated
-by changes in the structural environment rather than by changes in chemical identity.
+```math
+\sqrt{Z_i Z_j}
+=
+\sqrt{6(6)}
+=
+6.
+```
 
-Vacancies can modify:
+Consequently, the scalar chemical weight is identical for all C–C pairs.
 
-- local coordination numbers;
-- first- and higher-neighbor distance distributions;
-- bond-angle distributions;
-- radial–angular correlations;
-- the distribution of inequivalent local atomic environments.
+After block normalization, differences among the descriptor vectors are therefore
+primarily associated with structural changes generated by the vacancies.
+
+These changes include:
+
+- modification of local coordination;
+- removal of neighboring atoms;
+- changes in first- and higher-neighbor distance distributions;
+- changes in bond-angle distributions;
+- changes in radial–angular correlations;
+- variation in the distribution of inequivalent local environments.
 
 This makes vacancy-defective graphene a useful example for illustrating the geometric
-information encoded by RACE without the additional complexity of multiple chemical
+content of RACE without the additional complexity introduced by multiple chemical
 species.
 
 ---
@@ -1252,26 +1260,27 @@ species.
 The RDF describes how neighboring atoms are distributed as a function of distance from
 a central atom.
 
-Sharp radial features can reflect characteristic bond lengths and coordination shells.
+Sharp radial features can reflect characteristic interatomic distances and coordination
+shells.
 
-For an ordered crystalline environment, the radial distribution generally exhibits more
-localized features than in a strongly disordered structure.
+Ordered crystalline environments generally produce more localized radial features than
+strongly disordered environments.
 
 ---
 
 ## ADF
 
-The ADF describes the local angular geometry.
+The ADF describes local angular geometry.
 
-For example, characteristic carbon environments include approximately:
+Typical carbon environments include approximately:
 
 ```text
 sp2 carbon → 120°
 sp3 carbon → 109.5°
 ```
 
-Thus, angular information can distinguish environments that may contain similar bond
-lengths but different coordination geometry.
+Angular information can therefore distinguish environments having similar characteristic
+bond lengths but different local coordination geometries.
 
 ---
 
@@ -1279,13 +1288,13 @@ lengths but different coordination geometry.
 
 The joint map:
 
-$$
+```math
 F(r,\theta)
-$$
+```
 
 connects radial and angular information explicitly.
 
-Rather than asking only:
+Instead of asking only:
 
 ```text
 Which distances occur?
@@ -1303,19 +1312,19 @@ the joint representation additionally asks:
 Which distances occur together with which angles?
 ```
 
-The joint map therefore makes specific distance-angle relationships directly
-inspectable.
+The joint map therefore provides a directly inspectable representation of
+distance-angle correlations.
 
 ---
 
 # Dimensionality and chemical complexity
 
 A key characteristic of single-channel scalar-weighted RACE is that its feature
-dimension is independent of the number of chemical species.
+dimension does not depend on the number of chemical species.
 
-For fixed $N_R$ and $N_A$:
+For fixed `N_R` and `N_A`:
 
-$$
+```math
 D_{\mathrm{RACE}}
 =
 2N_R
@@ -1323,11 +1332,11 @@ D_{\mathrm{RACE}}
 2N_A
 +
 2N_RN_A
-$$
+```
 
-remains unchanged as the number of distinct elements increases.
+remains unchanged when the number of distinct chemical elements increases.
 
-For example, with the same geometric parameters:
+For example:
 
 ```text
 1 species
@@ -1336,24 +1345,24 @@ For example, with the same geometric parameters:
 20 species
 ```
 
-all use the same single-channel RACE dimensionality.
+can all be represented with the same single-channel geometric feature dimension when
+the RACE grid is unchanged.
 
 This is possible because chemical identity enters through a scalar elemental map rather
-than through separate mandatory species-pair feature blocks.
+than mandatory separate species-pair blocks.
 
 However, species-independent dimensionality should not be confused with dimensionality
-that is independent of descriptor resolution.
+that is independent of geometric resolution.
 
 The joint block scales as:
 
-$$
+```math
 D_{\mathrm{joint}}
 =
 2N_RN_A.
-$$
+```
 
-Therefore, increasing either the radial or angular resolution increases the total number
-of features.
+Increasing either `N_R` or `N_A` therefore increases the total number of features.
 
 ---
 
@@ -1361,24 +1370,25 @@ of features.
 
 For the default geometric resolution:
 
-$$
-N_R=N_A=16,
-$$
+```text
+N_R = 16
+N_A = 16
+```
 
-the scalar-weighted core RACE dimension remains:
+the single-channel core RACE dimension remains:
 
-$$
-D_{\mathrm{RACE}}=576
-$$
+```text
+576 features
+```
 
-regardless of whether the dataset contains one or several chemical species.
+independently of the number of chemical species represented by the scalar chemical map.
 
-This is an organizational characteristic of the scalar-weighted RACE representation.
+This is an organizational characteristic of RACE.
 
 It should not be interpreted as a claim that chemical compression is unique to RACE.
 
-Compressed SOAP and other alchemical or low-dimensional chemical representations can
-also reduce species-channel growth.
+Compressed SOAP, alchemical mappings, and other low-dimensional chemical
+representations can also control species-channel growth.
 
 ---
 
@@ -1395,34 +1405,34 @@ The computational cost is therefore influenced by:
 - radial resolution;
 - angular resolution.
 
-If a central atom has $m$ neighbors, the number of distinct neighbor pairs is:
+If a central atom has `m` neighbors, the number of distinct neighbor pairs is:
 
-$$
+```math
 N_{\mathrm{pairs}}
 =
 \frac{m(m-1)}{2}.
-$$
+```
 
-Thus, increasing the cutoff radius can substantially increase the amount of work required
-for the angular and joint terms.
+Increasing the cutoff radius can therefore substantially increase the number of
+neighbor-pair operations.
 
 The joint grid additionally scales with:
 
-$$
+```math
 N_RN_A.
-$$
+```
 
-The associated computational benchmarks showed that the present Python implementation
-has low peak memory during descriptor generation.
+The computational benchmarks in the associated study show that the present Python
+implementation has low peak memory during descriptor generation.
 
-However, it was not the fastest descriptor generator among the evaluated
+However, it is not the fastest descriptor generator among the evaluated
 implementations.
 
 The current implementation should therefore be understood as emphasizing:
 
 - transparency;
-- direct access to the descriptor components;
-- interpretability;
+- physical interpretability;
+- direct access to individual descriptor components;
 - ease of modification;
 
 rather than maximum runtime optimization.
@@ -1431,7 +1441,7 @@ rather than maximum runtime optimization.
 
 # Modifying the descriptor
 
-The main parameters are grouped near the beginning of:
+The principal parameters are grouped near the beginning of:
 
 ```text
 src/RACE_descriptor.py
@@ -1455,30 +1465,29 @@ NORMALIZE_GLOBAL = True
 EPS = 1e-12
 ```
 
-This organization makes it straightforward to perform parameter-sensitivity studies.
+This makes parameter-sensitivity studies straightforward.
 
-For example, a larger local environment could be investigated using:
+For example, a longer-range local environment could be tested with:
 
 ```python
 R_CUT = 6.0
 ```
 
-A finer radial representation could be generated using:
+A finer radial grid could be tested with:
 
 ```python
 N_R = 24
 ```
 
-and a finer angular grid using:
+and a finer angular grid with:
 
 ```python
 N_A = 24
 ```
 
-When modifying the grid resolution, the descriptor dimensionality must be recalculated
-using:
+When changing the resolution, the core descriptor dimension should be recalculated using:
 
-$$
+```math
 D_{\mathrm{RACE}}
 =
 2N_R
@@ -1486,17 +1495,18 @@ D_{\mathrm{RACE}}
 2N_A
 +
 2N_RN_A.
-$$
+```
 
-For example, if:
+For example, with:
 
-$$
-N_R=N_A=24,
-$$
+```text
+N_R = 24
+N_A = 24
+```
 
-then:
+the dimension becomes:
 
-$$
+```math
 D_{\mathrm{RACE}}
 =
 2(24)
@@ -1506,10 +1516,11 @@ D_{\mathrm{RACE}}
 2(24)(24)
 =
 1248.
-$$
+```
 
 Thus, increasing geometric resolution can substantially increase the descriptor
-dimension because of the joint block.
+dimension because the joint block grows as the product of the radial and angular
+resolutions.
 
 ---
 
@@ -1522,19 +1533,18 @@ It is not claimed to be a complete or systematically improvable many-body basis.
 Important considerations include:
 
 - descriptor parameters may require assessment for new applications;
-- the joint radial–angular block is much larger than the independent RDF and ADF
-  blocks;
+- the joint radial–angular block is much larger than the separate RDF and ADF blocks;
 - the incremental predictive value of the joint block is dataset dependent;
 - the joint block can introduce redundant information in finite-data regimes;
-- scalar chemical weighting does not fully encode global composition;
-- atomic-number weighting is a convenient default rather than a universal chemical
-  similarity metric;
+- scalar chemical weighting does not fully represent global composition;
+- atomic-number weighting is a convenient default rather than a universal metric of
+  chemical similarity;
 - structure-level mean/std pooling can dilute strongly localized environments;
-- the current Python implementation prioritizes transparency over maximum generation
+- the present Python implementation prioritizes transparency over maximum generation
   speed.
 
 For chemically broad materials databases, explicit global composition information may
-be useful in addition to the local RACE descriptor.
+be useful in addition to the local RACE structural descriptor.
 
 ---
 
@@ -1566,7 +1576,7 @@ as:
 - learned graph representations;
 - learned equivariant representations.
 
-It is not presented as a universal replacement for these approaches.
+It is not presented as a universal replacement for these methods.
 
 ---
 
@@ -1581,7 +1591,7 @@ pandas
 ASE
 ```
 
-Install the dependencies with:
+Install the dependencies using:
 
 ```bash
 pip install -r requirements.txt
@@ -1622,8 +1632,8 @@ The current repository includes vacancy-defective graphene structures.
 
 ### `results/`
 
-Contains precomputed descriptor output corresponding to the structures distributed
-with the repository.
+Contains precomputed descriptors corresponding to the structures distributed with the
+repository.
 
 ---
 
@@ -1635,14 +1645,14 @@ Install the dependencies:
 pip install -r requirements.txt
 ```
 
-For the repository organization shown above, set:
+Use:
 
 ```python
 STRUCTURE_FOLDER = "structures"
 OUTPUT_FILE = os.path.join("results", "descriptors.csv")
 ```
 
-and make sure the output directory exists:
+and ensure that the output directory is created:
 
 ```python
 os.makedirs("results", exist_ok=True)
@@ -1654,7 +1664,7 @@ Then execute from the repository root:
 python src/RACE_descriptor.py
 ```
 
-The calculation follows:
+The workflow is:
 
 ```text
 structures/
